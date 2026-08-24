@@ -1,523 +1,244 @@
-# Hospital Readmission Risk Prediction
+# Hospital Readmission Risk Model
 
-An end-to-end machine learning project for estimating the relative risk of **30-day hospital readmission among patients with diabetes**.
+An end-to-end machine-learning portfolio project that predicts **30-day hospital readmission risk for diabetic inpatient encounters** using the UCI Diabetes 130-US Hospitals dataset.
 
-The project includes data preprocessing, model training, evaluation, explainability, risk categorisation and an interactive **Streamlit dashboard** for presenting results to stakeholders.
+> **Important:** this is a research/portfolio prototype. It has not been clinically validated and must not be used for patient-care decisions.
 
-> **Important:** This project is intended for educational and analytical purposes. The model is not clinically validated and should not be used for individual medical decision-making.
+## What this project demonstrates
 
----
-
-## Project Overview
-
-Hospital readmissions are an important challenge in healthcare. Identifying patients with an elevated risk of being readmitted may help healthcare organisations better understand patterns in historical patient data and explore opportunities for targeted follow-up.
-
-This project investigates whether historical hospital data can be used to estimate the **relative risk of readmission within 30 days** for patients with diabetes.
-
-The final system consists of two main components:
-
-1. A machine learning pipeline that preprocesses the data, trains and evaluates the model, and generates prediction and explainability outputs.
-2. A Streamlit dashboard that presents model results and risk information in a stakeholder-friendly format.
-
-The model output should be interpreted as a **relative risk score**, not as a clinically calibrated probability.
-
----
-
-## Tech Stack
-
-* Python
-* Pandas
-* NumPy
-* Scikit-learn
-* Matplotlib
-* Streamlit
-* Joblib
-
----
-
-## Machine Learning Workflow
-
-The project follows the following workflow:
-
-```text
-Historical hospital data
-        ↓
-Data preprocessing
-        ↓
-Feature preparation
-        ↓
-Train / test split
-        ↓
-Logistic Regression
-        ↓
-Model evaluation
-        ↓
-Feature importance analysis
-        ↓
-Patient-level risk scores
-        ↓
-Streamlit dashboard
-```
-
----
+- Leakage-aware **patient-level** train/validation/test splitting
+- Scikit-learn `Pipeline` + `ColumnTransformer`
+- Numeric imputation and `StandardScaler`
+- Categorical imputation and one-hot encoding with unknown-category handling
+- Class-imbalance handling with balanced Logistic Regression
+- Validation-only operating-threshold selection
+- Evaluation with ROC-AUC, PR-AUC, precision, recall, F1 and confusion matrix
+- A `DummyClassifier` prior baseline
+- Training-derived Low / Medium / Higher relative-risk bands
+- Permutation importance plus clearly labelled coefficient-magnitude analysis
+- A Streamlit dashboard that loads the exact artifacts produced by training
+- Unit tests and GitHub Actions CI
 
 ## Dataset
 
-The dataset contains historical hospital encounters involving patients with diabetes.
+This project uses **Diabetes 130-US Hospitals for Years 1999–2008** from the UCI Machine Learning Repository. The dataset contains 101,766 hospital encounters and includes repeated encounters for some patients, which is why this project splits by `patient_nbr` instead of randomly splitting individual encounters.
 
-The target variable is:
+UCI source: https://archive.ics.uci.edu/dataset/296/diabetes+130-us+hospitals+for+years+1999-2008
 
-```text
-readmitted_30_days
-```
+Citation:
 
-It represents whether a patient was readmitted to the hospital within 30 days.
+> Clore, J., Cios, K., DeShazo, J., & Strack, B. (2014). *Diabetes 130-US Hospitals for Years 1999–2008* [Dataset]. UCI Machine Learning Repository. https://doi.org/10.24432/C5230J
 
-The positive class is relatively uncommon:
+The dataset is licensed under **CC BY 4.0**. See [`DATASET_ATTRIBUTION.md`](DATASET_ATTRIBUTION.md).
 
-```text
-30-day readmission rate: 11.16%
-```
+## Target
 
-This creates a **class-imbalanced machine learning problem**.
+The original `readmitted` field contains three outcomes:
 
-Because of this imbalance, accuracy alone is not sufficient for evaluating the model. Metrics such as **recall, precision, F1-score, ROC-AUC and PR-AUC** are also used.
+- `<30` — readmitted within 30 days
+- `>30` — readmitted after 30 days
+- `NO` — no recorded readmission
 
-> Add the original dataset source here if the dataset is publicly available.
-
----
-
-## Final Model
-
-The final model is a:
-
-**Logistic Regression Classifier**
-
-Configuration:
-
-| Setting            |               Value |
-| ------------------ | ------------------: |
-| Model              | Logistic Regression |
-| Test size          |                 20% |
-| Random state       |                  42 |
-| Class weighting    |            Balanced |
-| Decision threshold |                0.50 |
-
-The model uses:
-
-```python
-class_weight="balanced"
-```
-
-to give additional importance to the minority readmission class during training.
-
-Logistic Regression also provides an interpretable linear model, which is useful in a healthcare-oriented project where understanding model behaviour is important.
-
----
-
-## Model Performance
-
-The final model achieved the following results on the test set:
-
-| Metric    |      Score |
-| --------- | ---------: |
-| Accuracy  | **64.56%** |
-| Precision | **16.76%** |
-| Recall    | **54.87%** |
-| F1-score  | **25.67%** |
-| ROC-AUC   | **0.6426** |
-| PR-AUC    | **0.2030** |
-
-### Interpretation
-
-**ROC-AUC — 0.6426**
-
-Measures how well the model ranks readmitted patients above non-readmitted patients across different classification thresholds.
-
-**PR-AUC — 0.2030**
-
-Precision-Recall Area Under the Curve is particularly relevant because only approximately 11% of encounters belong to the positive class.
-
-**Recall — 54.87%**
-
-Of the patients in the test set who were actually readmitted within 30 days, the model identified approximately **55%**.
-
-**Precision — 16.76%**
-
-Of the encounters classified as 30-day readmission cases, approximately **17%** were actually readmitted.
-
-Because the dataset is imbalanced, the model involves a trade-off between identifying more readmission cases and generating more false-positive predictions.
-
----
-
-## Confusion Matrix
-
-At a decision threshold of `0.50`, the final model produced:
-
-|                           | Predicted No Readmission | Predicted Readmission |
-| ------------------------- | -----------------------: | --------------------: |
-| **Actual No Readmission** |                   11,894 |                 6,189 |
-| **Actual Readmission**    |                    1,025 |                 1,246 |
-
-This corresponds to:
-
-* **True Negatives:** 11,894
-* **False Positives:** 6,189
-* **False Negatives:** 1,025
-* **True Positives:** 1,246
-
-The model identifies a meaningful proportion of readmitted patients, but this comes with a relatively large number of false-positive classifications.
-
-This trade-off is especially important when considering potential healthcare applications.
-
----
-
-## Why Accuracy Is Not Enough
-
-Approximately **88.84%** of observations are not readmitted within 30 days.
-
-Because of this class imbalance, a model could achieve high accuracy simply by predicting the majority class most of the time.
-
-For this reason, this project focuses on several complementary evaluation metrics:
-
-* **Recall** — how many actual readmission cases are identified.
-* **Precision** — how many predicted readmissions are correct.
-* **F1-score** — balance between precision and recall.
-* **ROC-AUC** — overall ranking performance across thresholds.
-* **PR-AUC** — performance focused on the minority positive class.
-
----
-
-## Relative Risk Scores
-
-The Logistic Regression model generates prediction scores that are used to compare the relative readmission risk between encounters.
-
-Because the model is trained with:
-
-```python
-class_weight="balanced"
-```
-
-these scores should **not be interpreted directly as clinically calibrated probabilities**.
-
-For example, a score of:
+The binary target used here is:
 
 ```text
-0.70
+1 = <30
+0 = >30 or NO
 ```
 
-does not necessarily mean that a patient has a clinically validated 70% probability of being readmitted.
+## Leakage-aware split
 
-Instead, higher scores indicate **higher model-estimated relative risk**.
-
----
-
-## Risk Categories
-
-For presentation in the dashboard, model scores are divided into relative risk categories using quantiles derived from the training predictions.
-
-Current thresholds:
-
-| Risk transition |    Score |
-| --------------- | -------: |
-| Low → Medium    | 0.448295 |
-| Medium → Higher | 0.579669 |
-
-These categories are intended to make model output easier to communicate to stakeholders.
-
-They are:
-
-**relative presentation categories only and are not clinically validated thresholds.**
-
----
-
-## Explainability
-
-The project includes feature-importance outputs to help investigate which variables influence the model predictions.
-
-Generated outputs include:
+A normal encounter-level random split can place two encounters belonging to the same patient in different partitions. This project avoids that by splitting **unique patients first**, then assigning all encounters for each patient to exactly one partition:
 
 ```text
-outputs/encoded_feature_importance.csv
-outputs/feature_importance.csv
-outputs/feature_importance_original_features.csv
-outputs/feature_importance_original_level.csv
-outputs/feature_importance_top15.png
-outputs/feature_importance_top20.png
-outputs/feature_importance_original_top20.png
+70% train / 15% validation / 15% test
 ```
 
-These outputs make it possible to inspect model behaviour at both encoded-feature and original-feature level.
+Patient groups are stratified by whether a patient has at least one positive encounter. The validation set is used to select the classifier operating threshold. The final test set is reserved for final reporting.
 
-Explainability is especially important in healthcare-related machine learning because model predictions should not be treated as black-box decisions.
+## Model
 
----
+The baseline model is a balanced Logistic Regression classifier. Numeric and categorical preprocessing are fitted only inside the scikit-learn pipeline.
 
-## Dashboard
+Key design choices:
 
-An interactive dashboard is provided using **Streamlit**.
+- `SimpleImputer(strategy="median")` + `StandardScaler()` for numeric features
+- `SimpleImputer(strategy="most_frequent")` + `OneHotEncoder(handle_unknown="ignore")` for categorical features
+- `class_weight="balanced"` for the imbalanced target
+- `predict_proba()` for ranking scores
 
-The dashboard is designed to communicate the model results in a more accessible format for stakeholders.
+Because balanced class weights change the relationship between model scores and the observed event rate, the dashboard labels the output as a **relative risk score**, not as a clinically calibrated individual probability.
 
-It can be launched with:
+## Thresholds
+
+Two different threshold concepts are intentionally separated:
+
+1. **Classifier operating threshold** — selected on the validation set by maximizing F1, with recall used as a tie-breaker.
+2. **Risk-band thresholds** — the 50th and 80th percentiles of **training-set** risk scores. These define Low / Medium / Higher relative-risk groups and are not clinical cut-offs.
+
+The full validation threshold sweep is exported to `outputs/threshold_analysis.csv`.
+
+## Results
+
+Run the training pipeline to generate current results:
 
 ```bash
-streamlit run dashboard/app.py
+python -m src.train
 ```
 
-After starting Streamlit, the application is normally available at:
+The refactor changes the evaluation split, so older encounter-level metrics should **not** be reused as if they were directly comparable. Current final metrics are generated in:
 
 ```text
-http://localhost:8501
+outputs/evaluation_results.json
 ```
 
-### Recommended screenshot
+The Streamlit dashboard reads those metrics directly, preventing README/dashboard/model drift.
 
-For the GitHub portfolio version of this repository, add a screenshot of the dashboard to:
+## Project structure
 
 ```text
-assets/dashboard.png
-```
-
-and add the following to this section:
-
-```markdown
-![Hospital Readmission Dashboard](assets/dashboard.png)
-```
-
----
-
-## Project Structure
-
-```text
-hospital-readmission-risk/
-│
+Hospital-readmission-model/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
 ├── dashboard/
-│   └── app.py
-│
-├── Dataset/
-│   └── readmissions.csv
-│
-├── Docs/
-│   ├── Domain analysis document.docx
-│   └── final_notebook_conclusions.html
-│
-├── outputs/
-│   ├── evaluation_results.json
-│   ├── patient_level_predictions.csv
-│   ├── test_predictions.csv
-│   ├── feature_importance.csv
-│   ├── feature_importance_top15.png
-│   ├── feature_importance_top20.png
-│   ├── final_readmission_regression_model.joblib
-│   └── ...
-│
+│   ├── app.py
+│   ├── shared.py
+│   └── pages/
+│       ├── 1_Model_Results.py
+│       ├── 2_Risk_Explorer.py
+│       ├── 3_Explainability.py
+│       └── 4_Limitations.py
+├── data/
+│   └── diabetic_data.csv          # local dataset; use your existing copy
+├── outputs/                       # generated; ignored by git
 ├── src/
+│   ├── __init__.py
+│   ├── modeling.py
 │   └── train.py
-│
+├── tests/
+│   └── test_modeling.py
 ├── .gitignore
-├── README.md
-└── requirements.txt
+├── DATASET_ATTRIBUTION.md
+├── pyproject.toml
+├── requirements.txt
+├── requirements-dev.txt
+└── README.md
 ```
 
-### Main Files
-
-#### `src/train.py`
-
-Runs the machine learning pipeline.
-
-The script handles model training, evaluation and generation of model output files.
-
-#### `dashboard/app.py`
-
-Streamlit application used to explore and present the model results.
-
-#### `outputs/evaluation_results.json`
-
-Contains the final model configuration, evaluation metrics, confusion matrix and risk-category thresholds.
-
-#### `outputs/`
-
-Contains generated predictions, model artifacts, evaluation files and feature-importance outputs.
-
-#### `Docs/`
-
-Contains supporting domain analysis and project documentation.
-
----
-
-## Installation
+## Setup
 
 ### 1. Clone the repository
 
 ```bash
-git clone <repository-url>
-cd hospital-readmission-risk
+git clone https://github.com/Guleed2509/Hospital-readmission-model.git
+cd Hospital-readmission-model
 ```
 
 ### 2. Create a virtual environment
 
-On macOS or Linux:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-On Windows:
+macOS / Linux:
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate
+source .venv/bin/activate
+```
+
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+Windows Command Prompt:
+
+```bat
+python -m venv .venv
+.venv\Scripts\activate.bat
 ```
 
 ### 3. Install dependencies
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
----
-
-## How to Run
-
-### Train and evaluate the model
-
-From the project root:
+For development/tests:
 
 ```bash
-python src/train.py
+pip install -r requirements-dev.txt
 ```
 
-The pipeline generates model artifacts, predictions, evaluation metrics and explainability outputs inside:
+### 4. Add the dataset
+
+Place `diabetic_data.csv` in:
+
+```text
+data/diabetic_data.csv
+```
+
+The training script also recognizes `Data/diabetic_data.csv`, a root-level file, or a custom location provided through `READMISSION_DATA_PATH`.
+
+### 5. Train and evaluate
+
+```bash
+python -m src.train
+```
+
+Generated artifacts include:
 
 ```text
 outputs/
+├── final_readmission_classifier.joblib
+├── evaluation_results.json
+├── threshold_analysis.csv
+├── test_predictions.csv
+├── coefficient_magnitudes.csv
+└── permutation_importance.csv
 ```
 
-### Start the dashboard
+### 6. Run the dashboard
 
 ```bash
 streamlit run dashboard/app.py
 ```
 
-Streamlit will display a local address, normally:
+## Testing and CI
 
-```text
-http://localhost:8501
+Run locally:
+
+```bash
+ruff check src dashboard tests
+pytest -q
+python -m compileall -q src dashboard
 ```
 
-Open this address in a browser to use the dashboard.
+The GitHub Actions workflow runs the same checks on pushes and pull requests.
 
----
+## Interpretation and limitations
 
-## Generated Outputs
+- The model is a **baseline**, not a clinical product.
+- Data is historical (1999–2008) and limited to diabetic inpatient encounters in the source dataset.
+- Demographic attributes require careful subgroup/fairness evaluation before any real-world use.
+- Model associations and coefficients are **not causal effects**.
+- Risk bands are relative ranking groups, not medical thresholds.
+- The model score is not presented as a clinically calibrated probability.
+- Real deployment would require external validation, calibration, fairness analysis, clinical governance, monitoring, privacy/security controls and prospective evaluation.
 
-The machine learning pipeline produces several artifacts, including:
+## Privacy and responsible demo use
 
-```text
-evaluation_results.json
-patient_level_predictions.csv
-test_predictions.csv
-feature_importance.csv
-feature_importance_original_features.csv
-feature_importance_original_level.csv
-model_input_columns.json
-final_readmission_regression_model.joblib
-```
+The Streamlit Risk Explorer is intentionally framed as a **synthetic what-if demo**. Do not enter identifiable patient information.
 
-These files support model evaluation, explainability and the Streamlit dashboard.
+## Future improvements
 
----
+- Add subgroup performance/fairness reporting
+- Add probability calibration experiments on a dedicated calibration/validation strategy
+- Compare Logistic Regression against tree-based baselines using the same patient-level split
+- Add temporal or hospital-level external validation if appropriate data becomes available
+- Add model-card documentation and deployment monitoring
 
-## Limitations
+## Reproducibility
 
-Several limitations should be considered when interpreting the results.
-
-### Class imbalance
-
-Only approximately **11.16%** of encounters represent a 30-day readmission.
-
-This makes predicting the minority class substantially more difficult and results in a trade-off between recall and precision.
-
-### Moderate predictive performance
-
-The final ROC-AUC of **0.6426** indicates that the model contains predictive signal, but its ability to distinguish between readmitted and non-readmitted patients is limited.
-
-The model should therefore not be interpreted as a production-ready clinical prediction system.
-
-### False positives
-
-The model produces a substantial number of false-positive classifications.
-
-At the current threshold:
-
-```text
-False positives: 6,189
-True positives:  1,246
-```
-
-Any real-world implementation would therefore require careful evaluation of the consequences of unnecessary interventions.
-
-### Probability calibration
-
-Because Logistic Regression uses balanced class weights, its prediction scores are used as **relative risk scores** rather than validated clinical probabilities.
-
-Probability calibration would need to be evaluated separately before interpreting scores as absolute probabilities.
-
-### Risk thresholds
-
-The Low, Medium and Higher risk categories used in the dashboard are derived from model score distributions.
-
-They have **not been clinically validated**.
-
-### Generalisability
-
-Performance on this dataset does not guarantee equivalent performance on patients from different hospitals, populations, geographic regions or time periods.
-
-External validation would be required before considering real-world use.
-
----
-
-## Ethical Considerations
-
-Machine learning in healthcare requires additional care because incorrect predictions may affect real people.
-
-Important considerations include:
-
-* Potential demographic or historical bias in the dataset.
-* Differences in healthcare access and treatment patterns.
-* False negatives that may fail to identify high-risk patients.
-* False positives that may lead to unnecessary follow-up.
-* The need for transparency and explainability.
-* The importance of human oversight.
-* Validation on external patient populations.
-
-This model should therefore be viewed as an **analytical and educational decision-support prototype**, not as an autonomous medical decision system.
-
----
-
-## Possible Future Improvements
-
-Potential next steps include:
-
-* Compare additional classification algorithms.
-* Perform more extensive hyperparameter optimisation.
-* Evaluate different classification thresholds.
-* Investigate probability calibration.
-* Perform subgroup fairness analysis.
-* Expand explainability analysis.
-* Test performance on external datasets.
-* Investigate temporal validation.
-* Improve feature engineering.
-* Deploy the dashboard as an online demonstration.
-* Add automated tests and CI using GitHub Actions.
-
----
-
-## Author
-
-**Faisal Guleed**
-
-Data & AI Student
-Fontys ICT — AI & Machine Learning
+The model and split use a fixed random seed (`42`). Generated model outputs are intentionally excluded from git so results are produced from the code and local dataset rather than silently drifting out of sync.
